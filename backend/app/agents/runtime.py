@@ -236,7 +236,7 @@ async def stream_agent_events(
             state.context_docs = context_docs
         return
 
-    stream = agent.astream(input_payload, config=run_config, stream_mode="messages")
+    stream = agent.astream(input_payload, config=run_config, stream_mode="messages") # type: ignore
 
     async for event in stream:
         async for tool_event in _drain_tool_events(queue):
