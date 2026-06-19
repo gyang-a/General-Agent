@@ -4,10 +4,25 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
 
+from pydantic import BaseModel, Field
+
 from app.agents.registry import to_openai_client_base_url
 from app.agents.tools import create_web_search_tool
 from app.checkpoints.state import get_active_checkpointer
 from app.core.config import get_settings
+
+
+class AgentRunInput(BaseModel):
+    username: str
+    provider: dict[str, Any] = Field(default_factory=dict)
+    model: str
+    conversation_id: str
+    message: str
+    rag_context: str = ""
+    use_web_search: bool = False
+    refs: list[dict[str, Any]] = Field(default_factory=list)
+    context_docs: list[dict[str, Any]] = Field(default_factory=list)
+    retrieval_mode_used: str = "none"
 
 
 @dataclass
@@ -135,16 +150,7 @@ async def _invoke_agent_once(
 
 async def stream_agent_events(
     *,
-    username: str,
-    provider: dict[str, Any],
-    model: str,
-    conversation_id: str,
-    message: str,
-    rag_context: str,
-    use_web_search: bool,
-    refs: list[dict[str, Any]],
-    context_docs: list[dict[str, Any]],
-    retrieval_mode_used: str,
+    run_input: AgentRunInput,
     state: AgentRunState,
 ) -> AsyncIterator[dict[str, Any]]:
     try:
@@ -156,15 +162,15 @@ async def stream_agent_events(
         return
 
     settings = get_settings()
-    endpoint = str(provider.get("endpoint") or "").strip()
-    langchain_provider = str(provider.get("langchainProvider") or "openai").strip() or "openai"
-    api_key = str(provider.get("apiKey") or "").strip()
-    auth_mode = str(provider.get("authMode") or settings.upstream_auth_mode).strip().lower()
+    endpoint = str(run_input.provider.get("endpoint") or "").strip()
+    langchain_provider = str(run_input.provider.get("langchainProvider") or "openai").strip() or "openai"
+    api_key = str(run_input.provider.get("apiKey") or "").strip()
+    auth_mode = str(run_input.provider.get("authMode") or settings.upstream_auth_mode).strip().lower()
 
     context_blocks = []
-    if rag_context:
-        context_blocks.append(f"请优先依据以下知识库片段回答，若证据不足请明确说明：\n\n{rag_context}")
-    if use_web_search:
+    if run_input.rag_context:
+        context_blocks.append(f"请优先依据以下知识库片段回答，若证据不足请明确说明：\n\n{run_input.rag_context}")
+    if run_input.use_web_search:
         context_blocks.append("用户已开启联网搜索工具。遇到实时信息、外部事实、新闻、价格、日程或你不确定的问题时，可以调用 web_search；无需联网时直接回答。")
     system_prompt = (
         f"{settings.upstream_system_prompt}\n\n" + "\n\n=====\n\n".join(context_blocks)
@@ -178,7 +184,7 @@ async def stream_agent_events(
         web_refs = _build_web_refs(result.get("refs") or [])
         if not web_refs:
             return
-        state.refs = [*web_refs, *refs]
+        state.refs = [*web_refs, *run_input.refs]
         state.context_docs = [
             {
                 "docId": "web-search",
@@ -186,17 +192,17 @@ async def stream_agent_events(
                 "score": 1,
                 "hitChunks": len(web_refs),
             },
-            *context_docs,
+            *run_input.context_docs,
         ]
         queue.put_nowait(
             {
                 "refs": state.refs,
                 "contextDocs": state.context_docs,
-                "retrievalModeUsed": retrieval_mode_used,
+                "retrievalModeUsed": run_input.retrieval_mode_used,
             }
         )
 
-    tools = [create_web_search_tool(on_web_results)] if use_web_search else []
+    tools = [create_web_search_tool(on_web_results)] if run_input.use_web_search else []
 
     model_kwargs: dict[str, Any] = {
         "model_provider": langchain_provider,
@@ -211,17 +217,17 @@ async def stream_agent_events(
         if settings.extra_headers:
             model_kwargs["default_headers"] = settings.extra_headers
 
-    chat_model = init_chat_model(model, **model_kwargs)
+    chat_model = init_chat_model(run_input.model, **model_kwargs)
     agent_kwargs = {"model": chat_model, "tools": tools, "system_prompt": system_prompt}
     checkpointer = get_active_checkpointer()
     if checkpointer is not None:
         agent_kwargs["checkpointer"] = checkpointer
-    agent = create_agent(**agent_kwargs)
+    agent: Any = create_agent(**agent_kwargs)
 
-    input_payload = {"messages": [{"role": "user", "content": message}]}
-    run_config = {"configurable": {"thread_id": f"{username}:{conversation_id}"}}
+    input_payload = {"messages": [{"role": "user", "content": run_input.message}]}
+    run_config = {"configurable": {"thread_id": f"{run_input.username}:{run_input.conversation_id}"}}
 
-    if _should_use_non_streaming(provider, endpoint):
+    if _should_use_non_streaming(run_input.provider, endpoint):
         async for event in _invoke_agent_once(
             agent=agent,
             input_payload=input_payload,
@@ -231,12 +237,12 @@ async def stream_agent_events(
         ):
             yield event
         if not state.refs:
-            state.refs = refs
+            state.refs = run_input.refs
         if not state.context_docs:
-            state.context_docs = context_docs
+            state.context_docs = run_input.context_docs
         return
 
-    stream = agent.astream(input_payload, config=run_config, stream_mode="messages") # type: ignore
+    stream = agent.astream(input_payload, config=run_config, stream_mode="messages")
 
     async for event in stream:
         async for tool_event in _drain_tool_events(queue):
@@ -254,6 +260,6 @@ async def stream_agent_events(
         yield event
 
     if not state.refs:
-        state.refs = refs
+        state.refs = run_input.refs
     if not state.context_docs:
-        state.context_docs = context_docs
+        state.context_docs = run_input.context_docs

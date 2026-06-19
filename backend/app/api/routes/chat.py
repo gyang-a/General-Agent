@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
-from app.agents.runtime import AgentRunState, stream_agent_events
+from app.agents.runtime import AgentRunInput, AgentRunState, stream_agent_events
 from app.dependencies import require_auth
 from app.schemas.chat import ChatStreamRequest
 from app.services.message_service import persist_assistant_message, persist_user_message
@@ -71,7 +71,7 @@ async def chat_stream(payload: ChatStreamRequest, auth: dict = Depends(require_a
 
             state.refs = rag_payload["refs"]
             state.context_docs = rag_payload["contextDocs"]
-            async for event in stream_agent_events(
+            run_input = AgentRunInput(
                 username=username,
                 provider=provider,
                 model=resolved_model,
@@ -82,6 +82,9 @@ async def chat_stream(payload: ChatStreamRequest, auth: dict = Depends(require_a
                 refs=rag_payload["refs"],
                 context_docs=rag_payload["contextDocs"],
                 retrieval_mode_used=rag_payload["retrievalModeUsed"],
+            )
+            async for event in stream_agent_events(
+                run_input=run_input,
                 state=state,
             ):
                 yield sse_event(event)
