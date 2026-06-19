@@ -22,6 +22,7 @@ async def persist_assistant_message(
     refs: list[dict[str, Any]],
     context_docs: list[dict[str, Any]],
     retrieval_mode_used: str,
+    usage: dict[str, Any] | None = None,
 ) -> None:
     await get_repository().persist_assistant_message(
         username,
@@ -30,4 +31,5 @@ async def persist_assistant_message(
         refs,
         context_docs,
         retrieval_mode_used,
+        usage,
     )

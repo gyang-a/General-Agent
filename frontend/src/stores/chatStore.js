@@ -25,6 +25,20 @@ function normalizeTextContent(value) {
   return ''
 }
 
+function normalizeTokenUsage(value) {
+  if (!value || typeof value !== 'object') return null
+  const toCount = (item) => {
+    const count = Number(item)
+    return Number.isFinite(count) && count > 0 ? Math.floor(count) : 0
+  }
+  return {
+    inputTokens: toCount(value.inputTokens ?? value.input_tokens ?? value.prompt_tokens),
+    outputTokens: toCount(value.outputTokens ?? value.output_tokens ?? value.completion_tokens),
+    totalTokens: toCount(value.totalTokens ?? value.total_tokens),
+    cacheHitTokens: toCount(value.cacheHitTokens ?? value.cache_hit_tokens ?? value.cached_tokens),
+  }
+}
+
 function normalizePersistedMessages(messagesByConversation = {}) {
   const next = {}
   for (const [conversationId, list] of Object.entries(messagesByConversation)) {
@@ -32,6 +46,7 @@ function normalizePersistedMessages(messagesByConversation = {}) {
       ? list.map((message) => ({
           ...message,
           content: normalizeTextContent(message?.content),
+          usage: normalizeTokenUsage(message?.usage),
         }))
       : []
   }
@@ -240,6 +255,7 @@ export const useChatStore = create((set, get) => ({
       createdAt: Date.now(),
       refs: [],
       contextDocs: [],
+      usage: null,
       feedback: 'none',
     }
 
@@ -270,6 +286,9 @@ export const useChatStore = create((set, get) => ({
         ...patch,
         ...(Object.prototype.hasOwnProperty.call(patch || {}, 'content')
           ? { content: normalizeTextContent(patch.content) }
+          : {}),
+        ...(Object.prototype.hasOwnProperty.call(patch || {}, 'usage')
+          ? { usage: normalizeTokenUsage(patch.usage) }
           : {}),
       }
       const nextList = list.map((msg) => (msg.id === messageId ? { ...msg, ...safePatch } : msg))

@@ -139,6 +139,10 @@ export function useSSEChat() {
               deltaBuffer += deltaText
             }
 
+            if (event.usage) {
+              patchAssistantMessage(assistant.id, { usage: event.usage }, { updateConversationMeta: false })
+            }
+
             if (
               (event.refs && event.refs.length > 0) ||
               (event.contextDocs && event.contextDocs.length > 0) ||

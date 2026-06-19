@@ -47,7 +47,7 @@ const VirtualMessageRow = memo(function VirtualMessageRow({
     const element = rowRef.current
     if (!element) return
     measureElement(item.index, element)
-  }, [item.index, measureElement, message.refs, message.retrievalModeUsed])
+  }, [item.index, measureElement, message.refs, message.retrievalModeUsed, message.usage])
 
   return (
     <div

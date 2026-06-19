@@ -97,6 +97,7 @@ async def chat_stream(payload: ChatStreamRequest, auth: dict = Depends(require_a
                     state.refs,
                     state.context_docs,
                     rag_payload["retrievalModeUsed"],
+                    state.usage,
                 )
         except Exception as exc:
             state.error = str(exc) or "聊天生成失败"

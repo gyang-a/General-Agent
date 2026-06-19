@@ -188,6 +188,7 @@ class MongoRepository:
         refs: list[dict[str, Any]],
         context_docs: list[dict[str, Any]],
         retrieval_mode_used: str,
+        usage: dict[str, Any] | None,
     ) -> None:
         now = now_ms()
         await get_db().messages.insert_one(
@@ -202,6 +203,7 @@ class MongoRepository:
                 "refs": refs,
                 "contextDocs": context_docs,
                 "retrievalModeUsed": retrieval_mode_used,
+                "usage": usage,
                 "feedback": "none",
             }
         )

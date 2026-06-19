@@ -39,4 +39,5 @@ class AppRepository(Protocol):
         refs: list[dict[str, Any]],
         context_docs: list[dict[str, Any]],
         retrieval_mode_used: str,
+        usage: dict[str, Any] | None,
     ) -> None: ...
