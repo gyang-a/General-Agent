@@ -7,7 +7,6 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 PROJECT_ROOT = BACKEND_DIR.parent
 
@@ -26,7 +25,10 @@ class Settings(BaseSettings):
     auth_password: str = Field(default="123456", alias="AUTH_PASSWORD")
     auth_secret: str = Field(default="kira_dev_secret", alias="AUTH_SECRET")
     auth_token_ttl_ms: int = Field(default=15 * 60 * 1000, alias="AUTH_TOKEN_TTL_MS")
-    refresh_token_ttl_ms: int = Field(default=30 * 24 * 60 * 60 * 1000, alias="REFRESH_TOKEN_TTL_MS")
+    refresh_token_ttl_ms: int = Field(
+        default=30 * 24 * 60 * 60 * 1000,
+        alias="REFRESH_TOKEN_TTL_MS",
+    )
     refresh_cookie_name: str = Field(default="refresh_token", alias="REFRESH_COOKIE_NAME")
 
     mongodb_uri: str = Field(default="mongodb://127.0.0.1:27017", alias="MONGODB_URI")
@@ -47,6 +49,9 @@ class Settings(BaseSettings):
     uploads_dir: str = Field(default="../uploads", alias="UPLOADS_DIR")
 
     tavily_api_key: str = Field(default="", alias="TAVILY_API_KEY")
+    mcp_config_path: str = Field(default="app/mcp/config.json", alias="MCP_CONFIG_PATH")
+    amap_maps_api_key: str = Field(default="", alias="AMAP_MAPS_API_KEY")
+    agent_debug_history: bool = Field(default=False, alias="AGENT_DEBUG_HISTORY")
 
     @property
     def cors_origins(self) -> list[str]:
@@ -55,6 +60,13 @@ class Settings(BaseSettings):
     @property
     def upload_path(self) -> Path:
         path = Path(self.uploads_dir)
+        if not path.is_absolute():
+            path = (BACKEND_DIR / path).resolve()
+        return path
+
+    @property
+    def mcp_config_file(self) -> Path:
+        path = Path(self.mcp_config_path)
         if not path.is_absolute():
             path = (BACKEND_DIR / path).resolve()
         return path
@@ -75,4 +87,3 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
-

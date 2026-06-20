@@ -18,9 +18,16 @@ def normalize_search_results(results: list[dict[str, Any]]) -> dict[str, Any]:
                 "snippet": str(item.get("content") or item.get("snippet") or "").strip(),
             }
         )
+
     refs = [item for item in refs if item["name"] or item["url"] or item["snippet"]]
     text = "\n\n".join(
-        f"[标题]: {item['name'] or '未命名'}\n[链接]: {item['url'] or '无'}\n[摘要]: {item['snippet'] or '无'}"
+        "\n".join(
+            [
+                f"[标题]: {item['name'] or '未命名'}",
+                f"[链接]: {item['url'] or '无'}",
+                f"[摘要]: {item['snippet'] or '无'}",
+            ]
+        )
         for item in refs
     )
     return {"text": text, "refs": refs}
@@ -68,4 +75,3 @@ def create_web_search_tool(on_results: Callable[[dict[str, Any]], None] | None =
         return str(result["text"])
 
     return web_search
-

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
-from app.agents.runtime import AgentRunInput, AgentRunState, stream_agent_events
+from app.agents.runtime import stream_agent_events
+from app.agents.schemas import AgentRunInput, AgentRunState
 from app.dependencies import require_auth
 from app.schemas.chat import ChatStreamRequest
 from app.services.message_service import persist_assistant_message, persist_user_message
@@ -17,7 +19,10 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 
 @router.post("/stream")
-async def chat_stream(payload: ChatStreamRequest, auth: dict = Depends(require_auth)) -> StreamingResponse:
+async def chat_stream(
+    payload: ChatStreamRequest,
+    auth: Annotated[dict, Depends(require_auth)],
+) -> StreamingResponse:
     username = auth["username"]
     if not payload.conversation_id or not payload.message:
         raise HTTPException(status_code=400, detail="conversationId 和 message 为必填")
@@ -25,12 +30,18 @@ async def chat_stream(payload: ChatStreamRequest, auth: dict = Depends(require_a
     selection = await resolve_selection_for_user(username, payload.model)
     if not selection:
         models = await available_models(username)
-        raise HTTPException(status_code=400, detail=f"模型不可用，请从已配置模型中选择：{', '.join(models['models'])}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"模型不可用，请从已配置模型中选择：{', '.join(models['models'])}",
+        )
 
     provider = selection["provider"]
     resolved_model = selection["model"]
     if not provider.get("endpoint"):
-        raise HTTPException(status_code=500, detail="上游接口地址不能为空，请检查模型 Provider 配置")
+        raise HTTPException(
+            status_code=500,
+            detail="上游接口地址不能为空，请检查模型 Provider 配置",
+        )
 
     await persist_user_message(
         username,
@@ -42,7 +53,7 @@ async def chat_stream(payload: ChatStreamRequest, auth: dict = Depends(require_a
 
     async def events() -> AsyncIterator[str]:
         state = AgentRunState()
-        rag_payload = {
+        rag_payload: dict[str, Any] = {
             "promptContext": "",
             "refs": [],
             "contextDocs": [],
@@ -83,10 +94,8 @@ async def chat_stream(payload: ChatStreamRequest, auth: dict = Depends(require_a
                 context_docs=rag_payload["contextDocs"],
                 retrieval_mode_used=rag_payload["retrievalModeUsed"],
             )
-            async for event in stream_agent_events(
-                run_input=run_input,
-                state=state,
-            ):
+
+            async for event in stream_agent_events(run_input=run_input, state=state):
                 yield sse_event(event)
 
             if state.content and not state.error and not state.aborted:
